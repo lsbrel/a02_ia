@@ -1,61 +1,17 @@
-"""
-================================================================================
-ETAPA 3 - Aplicação dos algoritmos de aprendizagem
-================================================================================
-
-O enunciado pede que sejam comparados DOIS algoritmos. Para cobrir os dois
-paradigmas vistos em aula, escolhemos:
-
-   • ÁRVORE DE DECISÃO (supervisionada)
-        – Existe um "professor": cada jogador vem com a posição correta.
-        – O modelo aprende uma sequência de testes (if/else) sobre os
-          atributos. Usamos criterion='entropy', que é exatamente o
-          ID3/C4.5 da aula (escolhe a cada nó o atributo de maior Ganho
-          de Informação).
-
-   • K-MEANS (não-supervisionada)
-        – Ignoramos completamente o rótulo durante o treino e deixamos o
-          algoritmo descobrir agrupamentos só pela proximidade no espaço de
-          atributos. Como pré-existem 4 classes reais, fixamos K=4 - assim
-          conseguimos avaliar se a estrutura "natural" dos dados coincide
-          com as posições táticas que humanos enxergam.
-
-OBSERVAÇÃO DIDÁTICA - comparar acurácia de um classificador supervisionado
-com um agrupador não-supervisionado é, em sentido estrito, "injusto": o
-K-Means não viu os rótulos e ainda assim é cobrado contra eles. O objetivo
-da comparação NÃO é dizer "quem é melhor" e sim mostrar que, quando o
-domínio tem estrutura forte (como o futebol, em que goleiros vs jogadores
-de linha são quase clusters perfeitos), a aprendizagem não-supervisionada
-consegue redescobrir parte do conhecimento humano sozinha.
-
-PROTOCOLO DE AVALIAÇÃO:
-  • Holdout 80/20 estratificado → estimativa inicial (a aula a chama de
-    "procedimento holdout"). O parâmetro stratify=y é importante para
-    manter a proporção das 4 classes em ambos os subconjuntos.
-  • Validação cruzada k=10 estratificada → "método padrão para avaliação"
-    citado no slide de Validação Cruzada. Treina/testa 10 vezes e tira
-    média ± desvio para diminuir a variância da estimativa.
-  • Métricas do K-Means → Silhouette (separação interna, não usa rótulo) e
-    Adjusted Rand Index (semelhança com a partição real, usa rótulo).
-
-HIPERPARÂMETRO DA ÁRVORE: max_depth=8
-  Limitar a profundidade é um anti-overfitting simples. Uma árvore livre
-  perfeitamente memorizaria o conjunto de treino (acurácia ≈ 100% lá,
-  acurácia ruim no teste) - exatamente o problema da MEMORIZAÇÃO vs
-  GENERALIZAÇÃO discutido na aula. Profundidade 8 dá um modelo expressivo
-  o bastante para o problema sem decorar.
-================================================================================
-"""
 import numpy as np
 import pandas as pd
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.cluster import KMeans
 from sklearn.model_selection import (
-    train_test_split, cross_val_score, StratifiedKFold,
+    train_test_split,
+    cross_val_score,
+    StratifiedKFold,
 )
 from sklearn.metrics import (
-    accuracy_score, confusion_matrix,
-    silhouette_score, adjusted_rand_score,
+    accuracy_score,
+    confusion_matrix,
+    silhouette_score,
+    adjusted_rand_score,
 )
 
 
@@ -67,21 +23,22 @@ def step3_models(data, random_state=42):
     computador produz exatamente os mesmos números - essencial para
     qualquer resultado relatado em um trabalho acadêmico.
     """
-    X = data['X']
-    y = data['y']
-    colunas_usadas = data['colunas_usadas']
-    nomes_posicoes = data['nomes_posicoes']
+    X = data["X"]
+    y = data["y"]
+    colunas_usadas = data["colunas_usadas"]
+    nomes_posicoes = data["nomes_posicoes"]
 
-    # ══════════════════════════════════════════════════════════════════════
-    # 3A - ÁRVORE DE DECISÃO (Supervisionado)
-    # ══════════════════════════════════════════════════════════════════════
     print("\nETAPA 3A - Árvore de Decisão (Supervisionado)...")
 
     # Divisão holdout estratificada. stratify=y garante que cada uma das 4
     # classes apareça na mesma proporção em treino e teste, evitando que
     # uma classe minoritária (goleiros) acabe sumindo de um dos lados.
     X_treino, X_teste, y_treino, y_teste = train_test_split(
-        X, y, test_size=0.2, random_state=random_state, stratify=y,
+        X,
+        y,
+        test_size=0.2,
+        random_state=random_state,
+        stratify=y,
     )
     print(f"  Treino: {len(X_treino)} jogadores  |  Teste: {len(X_teste)} jogadores")
 
@@ -89,12 +46,12 @@ def step3_models(data, random_state=42):
     # árvore avalia o Ganho de Informação de cada atributo e divide pelo
     # que mais reduz a entropia (incerteza) das classes filhas.
     arvore = DecisionTreeClassifier(
-        criterion='entropy',
-        max_depth=8,           # anti-overfitting (memorização)
+        criterion="entropy",
+        max_depth=8,  # anti-overfitting (memorização)
         random_state=random_state,
     )
-    arvore.fit(X_treino, y_treino)   # treinamento ("fase de treinamento")
-    y_previsto_arvore = arvore.predict(X_teste)   # fase de utilização/teste
+    arvore.fit(X_treino, y_treino)  # treinamento ("fase de treinamento")
+    y_previsto_arvore = arvore.predict(X_teste)  # fase de utilização/teste
 
     acuracia_holdout = accuracy_score(y_teste, y_previsto_arvore)
     print(f"  Acurácia (holdout 80/20)  : {acuracia_holdout:.2%}")
@@ -103,7 +60,7 @@ def step3_models(data, random_state=42):
     # O modelo é treinado e testado 10 vezes em recortes diferentes;
     # a média estabiliza o estimador, o desvio mede sua incerteza.
     kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=random_state)
-    scores_cv = cross_val_score(arvore, X, y, cv=kfold, scoring='accuracy')
+    scores_cv = cross_val_score(arvore, X, y, cv=kfold, scoring="accuracy")
     acuracia_cv_media = scores_cv.mean()
     acuracia_cv_desvio = scores_cv.std()
     print(
@@ -115,7 +72,8 @@ def step3_models(data, random_state=42):
     # atributo somado por todos os nós da árvore. Quanto maior, mais
     # "discriminativo" o atributo foi para o aprendizado.
     importancia_atributos = pd.Series(
-        arvore.feature_importances_, index=colunas_usadas,
+        arvore.feature_importances_,
+        index=colunas_usadas,
     ).sort_values(ascending=False)
 
     print("\n  Top 5 atributos mais informativos:")
@@ -151,7 +109,7 @@ def step3_models(data, random_state=42):
     # inicializações aleatórias diferentes e fica com a melhor -
     # essa é justamente a "dependência de boa inicialização" citada
     # como ponto fraco do K-Means na aula.
-    numero_de_posicoes = len(nomes_posicoes)
+    numero_de_posicoes = len(nomes_posicoes) # 4
     kmeans = KMeans(n_clusters=numero_de_posicoes, random_state=random_state, n_init=10)
     clusters_encontrados = kmeans.fit_predict(X)
 
@@ -178,42 +136,51 @@ def step3_models(data, random_state=42):
     )
     acuracia_kmeans = accuracy_score(y, clusters_como_posicoes)
 
-    print(f"  Silhouette Score          : {silhouette_final:.3f}  "
-          f"(quanto maior, mais separados os clusters)")
-    print(f"  Adjusted Rand Index (ARI) : {ari_final:.3f}  "
-          f"(quanto maior, mais parecido com a verdade)")
-    print(f"  Acurácia (vs rótulo real) : {acuracia_kmeans:.2%}  "
-          f"(após mapeamento por voto)")
+    print(
+        f"  Silhouette Score          : {silhouette_final:.3f}  "
+        f"(quanto maior, mais separados os clusters)"
+    )
+    print(
+        f"  Adjusted Rand Index (ARI) : {ari_final:.3f}  "
+        f"(quanto maior, mais parecido com a verdade)"
+    )
+    print(
+        f"  Acurácia (vs rótulo real) : {acuracia_kmeans:.2%}  "
+        f"(após mapeamento por voto)"
+    )
 
     # Empacotamos TUDO num dict para a ETAPA 4 conseguir plotar sem
     # precisar reexecutar nada. Manter o estado fora dos arquivos
     # simplifica e deixa o pipeline rastreável.
     return {
         # --- Árvore ---
-        'arvore': arvore,
-        'X_treino': X_treino, 'X_teste': X_teste,
-        'y_treino': y_treino, 'y_teste': y_teste,
-        'y_previsto_arvore': y_previsto_arvore,
-        'acuracia_holdout': acuracia_holdout,
-        'scores_cv': scores_cv,
-        'acuracia_cv_media': acuracia_cv_media,
-        'acuracia_cv_desvio': acuracia_cv_desvio,
-        'importancia_atributos': importancia_atributos,
-        'matriz_confusao': matriz_confusao,
+        "arvore": arvore,
+        "X_treino": X_treino,
+        "X_teste": X_teste,
+        "y_treino": y_treino,
+        "y_teste": y_teste,
+        "y_previsto_arvore": y_previsto_arvore,
+        "acuracia_holdout": acuracia_holdout,
+        "scores_cv": scores_cv,
+        "acuracia_cv_media": acuracia_cv_media,
+        "acuracia_cv_desvio": acuracia_cv_desvio,
+        "importancia_atributos": importancia_atributos,
+        "matriz_confusao": matriz_confusao,
         # --- K-Means ---
-        'kmeans': kmeans,
-        'clusters_encontrados': clusters_encontrados,
-        'valores_k': valores_k,
-        'lista_inercias': lista_inercias,
-        'lista_silhouettes': lista_silhouettes,
-        'silhouette_final': silhouette_final,
-        'ari_final': ari_final,
-        'acuracia_kmeans': acuracia_kmeans,
-        'numero_de_posicoes': numero_de_posicoes,
+        "kmeans": kmeans,
+        "clusters_encontrados": clusters_encontrados,
+        "valores_k": valores_k,
+        "lista_inercias": lista_inercias,
+        "lista_silhouettes": lista_silhouettes,
+        "silhouette_final": silhouette_final,
+        "ari_final": ari_final,
+        "acuracia_kmeans": acuracia_kmeans,
+        "numero_de_posicoes": numero_de_posicoes,
     }
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from step1_load_data import step1_load
     from step2_normalize_data import step2_preprocess
+
     step3_models(step2_preprocess(step1_load()))
