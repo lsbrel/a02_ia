@@ -71,25 +71,12 @@ def step3_models(data, random_state=42):
     # ══════════════════════════════════════════════════════════════════════
     print("\nETAPA 3B - K-Means (Não-Supervisionado)...")
 
-    # Antes de fixar K=4, vale a pena ver o "Elbow Method": rodamos
-    # K-Means para K=2..8 e medimos (a) inércia - soma das distâncias
-    # quadradas dos pontos ao centroide; (b) silhouette - o quão bem
-    # separados os clusters estão. O "cotovelo" do gráfico de inércia
-    # geralmente indica o K ideal. A ETAPA 4 plota essas curvas.
-    lista_inercias = []
-    lista_silhouettes = []
-    valores_k = list(range(2, 9))
-    for k in valores_k:
-        km_teste = KMeans(n_clusters=k, random_state=random_state, n_init=10)
-        km_teste.fit(X)
-        lista_inercias.append(km_teste.inertia_)
-        lista_silhouettes.append(silhouette_score(X, km_teste.labels_))
-
     # Fixamos K = número real de classes para conseguir comparar
     # clusters = posições. n_init=10 roda o K-Means 10 vezes com
     # inicializações aleatórias diferentes e fica com a melhor -
     # essa é a "dependência de boa inicialização" citada
     # como ponto fraco do K-Means na aula.
+    valores_k = list(range(2, 9))
     numero_de_posicoes = len(nomes_posicoes) # 4
     kmeans = KMeans(n_clusters=numero_de_posicoes, random_state=random_state, n_init=10)
     clusters_encontrados = kmeans.fit_predict(X)
@@ -97,7 +84,6 @@ def step3_models(data, random_state=42):
     silhouette_final = silhouette_score(X, clusters_encontrados)
     ari_final = adjusted_rand_score(y, clusters_encontrados)
 
-    # ── Tradução cluster = posição ────────────────────────────────────────
     # O K-Means não conhece os nomes das classes; ele rotula como 0/1/2/3
     # arbitrariamente. Para comparar a clusterização com os rótulos reais,
     # mapeamos cada cluster para a posição mais frequente dentro dele
@@ -106,9 +92,11 @@ def step3_models(data, random_state=42):
     mapa_cluster_para_posicao = {}
     for id_cluster in range(numero_de_posicoes):
         rotulos_no_cluster = y[clusters_encontrados == id_cluster]
+        
         if len(rotulos_no_cluster) == 0:
             mapa_cluster_para_posicao[id_cluster] = 0
             continue
+
         valores, contagens = np.unique(rotulos_no_cluster, return_counts=True)
         mapa_cluster_para_posicao[id_cluster] = valores[np.argmax(contagens)]
 
@@ -148,9 +136,6 @@ def step3_models(data, random_state=42):
         # --- K-Means ---
         "kmeans": kmeans,
         "clusters_encontrados": clusters_encontrados,
-        "valores_k": valores_k,
-        "lista_inercias": lista_inercias,
-        "lista_silhouettes": lista_silhouettes,
         "silhouette_final": silhouette_final,
         "ari_final": ari_final,
         "acuracia_kmeans": acuracia_kmeans,
