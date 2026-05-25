@@ -2,18 +2,25 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
 COLUNAS_USADAS = [
-    "pace",  # velocidade - diferencia laterais/atacantes
-    "shooting",  # chute - separa atacantes do resto
-    "passing",  # passe - característica de meio-campistas
-    "dribbling",  # drible - atacantes e meias criativos
-    "defending",  # marcação geral - zagueiros e volantes
-    "physic",  # força física - zagueiros e atacantes de área
-    "goalkeeping_diving",  # mergulho - exclusivo de goleiros
-    "goalkeeping_handling",  # pegar a bola - exclusivo de goleiros
-    "goalkeeping_reflexes",  # reflexos - exclusivo de goleiros
-    "attacking_finishing",  # finalização - refina a classe Atacante
-    "defending_standing_tackle",  # carrinho parado - refina a classe Defensor
-    "mentality_positioning",  # posicionamento - útil para todas as classes
+    "pace",  # velocidade - NaN para goleiros (FIFA so calcula para jogadores de linha)
+    "shooting",  # chute - NaN para goleiros
+    "passing",  # passe - NaN para goleiros
+    "dribbling",  # drible - NaN para goleiros
+    "defending",  # marcacao geral - NaN para goleiros
+    "physic",  # forca fisica - NaN para goleiros
+    "goalkeeping_diving",  # mergulho - existe para todos, alto so em goleiros
+    "goalkeeping_handling",  # pegar a bola
+    "goalkeeping_reflexes",  # reflexos
+    "attacking_finishing",  # finalizacao
+    "defending_standing_tackle",  # carrinho parado
+    "mentality_positioning",  # posicionamento em campo
+]
+
+# Subconjunto das colunas acima que sao NaN para goleiros no dataset original.
+# Trataremos esses NaN como 0 (semanticamente: o FIFA nao mede essas habilidades
+# em goleiros, e o valor zero deixa a classe Goleiro trivialmente separavel).
+COLUNAS_SO_DE_LINHA = [
+    "pace", "shooting", "passing", "dribbling", "defending", "physic",
 ]
 
 
@@ -55,13 +62,21 @@ def step2_preprocess(tabela_original):
         agrupar_posicao
     )
 
-    # Mantemos apenas o subconjunto relevante (atributos + alvo) e descartamos
-    # linhas com qualquer campo vazio. Como goleiros têm 'pace'/'shooting'
-    # ausentes para jogadores de linha (e vice-versa para os 'goalkeeping_*'),
-    # o dropna remove justamente os jogadores cujos atributos não fazem sentido
-    # para a posição - não é perda de informação, é coerência.
+    # Mantemos apenas o subconjunto relevante (atributos + alvo).
     tabela = tabela_original[COLUNAS_USADAS + ["posicao_simples"]].copy()
-    tabela = tabela.dropna().reset_index(drop=True)
+
+    # IMPORTANTE: os goleiros do FIFA tem NaN nas 6 estatisticas de jogadores
+    # de linha (pace, shooting, passing, dribbling, defending, physic), porque
+    # o jogo nao calcula esses ratings para a posicao. Se simplesmente
+    # chamassemos dropna() aqui, perderiamos TODOS os goleiros (2132 instancias)
+    # e ficariamos com apenas 3 classes. Preenchemos esses NaN com 0: zero e
+    # interpretavel como "o FIFA nao mede essa habilidade neste jogador" e da
+    # ao classificador uma assinatura ultra-clara para detectar goleiros.
+    tabela[COLUNAS_SO_DE_LINHA] = tabela[COLUNAS_SO_DE_LINHA].fillna(0)
+
+    # Agora o dropna serve apenas para remover jogadores com posicao nao
+    # mapeada (raras combinacoes que cairam no return None de agrupar_posicao).
+    tabela = tabela.dropna(subset=["posicao_simples"]).reset_index(drop=True)
 
     print(f"  Instâncias após a limpeza : {len(tabela)}")
     print("  Distribuição por classe   :")
@@ -91,14 +106,14 @@ def step2_preprocess(tabela_original):
     nomes_posicoes = codificador_posicao.classes_
     print(
         f"\n  Codificação: {list(nomes_posicoes)} "
-        f"→ {list(range(len(nomes_posicoes)))}"
+        f"-> {list(range(len(nomes_posicoes)))}"
     )
 
     # X_norm = (X - média) / desvio_padrão, coluna a coluna. Indispensável
     # para o K-Means; inofensivo para a Árvore.
     normalizador = StandardScaler()
     X = normalizador.fit_transform(X_texto)
-    print(f"  Matriz X final: {X.shape[0]} linhas × {X.shape[1]} atributos.")
+    print(f"  Matriz X final: {X.shape[0]} linhas x {X.shape[1]} atributos.")
 
     return {
         "X": X,

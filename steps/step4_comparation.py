@@ -1,4 +1,37 @@
+"""
+================================================================================
+ETAPA 4 - Analise dos resultados e visualizacoes
+================================================================================
+
+Painel 2x2 com 4 graficos focados:
+
+   1. Curva de aprendizado
+      Como a acuracia da Arvore evolui conforme aumentamos o treino.
+      O gap entre treino e teste e o indicador de overfitting.
+
+   2. Matriz de confusao normalizada (%)
+      Mostra ONDE a Arvore acerta e erra, em proporcao por classe real.
+      Normalizar por linha deixa muito mais facil de ler que contagens.
+
+   3. Estrutura real (PCA + rotulos verdadeiros)
+      Projecao 2D dos 12 atributos colorida pelas posicoes REAIS dos
+      jogadores. Mostra o ground truth.
+
+   4. Descoberta do K-Means (PCA + clusters mapeados)
+      Mesmo grafico, agora colorido pelos clusters do K-Means (mapeados
+      para a posicao mais frequente em cada cluster).
+
+Os graficos 3 e 4 usam o MESMO sistema de coordenadas e a MESMA paleta
+de cores, entao bate olho e da pra ver onde o K-Means concordou ou
+discordou da realidade.
+
+Gerados em arquivos separados:
+  - resultados_fifa.png            (painel 2x2)
+  - importancia_atributos_fifa.png (importancia da Arvore)
+================================================================================
+"""
 from pathlib import Path
+
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -6,16 +39,15 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
 
-# Os PNGs são salvos em fifa/ (uma pasta acima de steps/) para ficarem
-# junto do README/relatório, e não soltos dentro de steps/.
-BASE_DIR = Path(__file__).resolve().parent.parent  # → fifa/
+
+BASE_DIR = Path(__file__).resolve().parent.parent   # fifa/
 
 
 def step4_compare(data, models, output_dir=BASE_DIR, show=True):
-    """Renderiza o painel 2×3 e o gráfico bônus de importância. Salva PNGs."""
-    print("\nETAPA 4 - Gerando gráficos e resumo final...")
+    """Renderiza o painel 2x2 e o grafico bonus de importancia."""
+    print("\nETAPA 4 - Gerando graficos e resumo final...")
 
-    # ── Desempacotamento para deixar o código de plot mais legível ────────
+    # ── Desempacotamento ──────────────────────────────────────────────────
     X = data["X"]
     y = data["y"]
     nomes_posicoes = data["nomes_posicoes"]
@@ -25,11 +57,7 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
     acuracia_holdout = models["acuracia_holdout"]
     acuracia_cv_media = models["acuracia_cv_media"]
     acuracia_cv_desvio = models["acuracia_cv_desvio"]
-    scores_cv = models["scores_cv"]
     matriz_confusao = models["matriz_confusao"]
-    valores_k = models["valores_k"]
-    lista_inercias = models["lista_inercias"]
-    lista_silhouettes = models["lista_silhouettes"]
     clusters_encontrados = models["clusters_encontrados"]
     silhouette_final = models["silhouette_final"]
     ari_final = models["ari_final"]
@@ -37,180 +65,145 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
     importancia_atributos = models["importancia_atributos"]
     numero_de_posicoes = models["numero_de_posicoes"]
 
-    fig, eixos = plt.subplots(2, 3, figsize=(17, 10))
-    fig.suptitle(
-        "Resultados - FIFA 22: Árvore de Decisão vs K-Means",
-        fontsize=15,
-        fontweight="bold",
+    # ── Preparacoes compartilhadas ────────────────────────────────────────
+    # PCA: projetamos as 12 dimensoes em 2D uma unica vez, e usamos a mesma
+    # projecao nos graficos 3 e 4. Isso garante que estamos comparando
+    # exatamente os mesmos pontos, so com cores diferentes.
+    redutor_pca = PCA(n_components=2, random_state=42)
+    X_em_2d = redutor_pca.fit_transform(X)
+
+    # Mapeamento cluster -> posicao (voto majoritario). Permite usar a
+    # MESMA paleta de cores para rotulos reais e clusters do K-Means:
+    # se a Posicao X for verde no grafico 3, o cluster que virou X tambem
+    # sera verde no grafico 4. Cores iguais = K-Means acertou.
+    mapa_cluster_para_posicao = {}
+    for id_cluster in range(numero_de_posicoes):
+        rotulos_no_cluster = y[clusters_encontrados == id_cluster]
+        if len(rotulos_no_cluster) == 0:
+            mapa_cluster_para_posicao[id_cluster] = 0
+            continue
+        valores, contagens = np.unique(rotulos_no_cluster, return_counts=True)
+        mapa_cluster_para_posicao[id_cluster] = valores[np.argmax(contagens)]
+    clusters_como_posicoes = np.array(
+        [mapa_cluster_para_posicao[c] for c in clusters_encontrados]
     )
 
-    # ── Gráfico 1: Curva de aprendizado (memorização vs generalização) ───
-    # Treinamos a árvore em frações progressivas dos dados e medimos a
-    # acurácia tanto nos dados de treino quanto nos de teste. O gap entre
-    # as duas curvas é exatamente o indicador de overfitting visto na aula.
+    # Paleta fixa: uma cor por posicao (sempre na mesma ordem alfabetica
+    # do LabelEncoder). Usar cores categoricas claras facilita a leitura.
+    paleta = plt.get_cmap("tab10")
+    cores_por_classe = {i: paleta(i) for i in range(len(nomes_posicoes))}
+
+    # ══════════════════════════════════════════════════════════════════════
+    # PAINEL 2x2
+    # ══════════════════════════════════════════════════════════════════════
+    fig, eixos = plt.subplots(2, 2, figsize=(15, 12))
+    fig.suptitle(
+        "FIFA 22: Arvore de Decisao (supervisionado) vs K-Means (nao supervisionado)",
+        fontsize=15, fontweight="bold",
+    )
+
+    # ── Grafico 1: Curva de aprendizado ───────────────────────────────────
+    # Treinamos a arvore em fracoes crescentes dos dados e medimos
+    # acuracia em treino e teste. Treino sempre alto; teste sobe e
+    # estabiliza. Gap pequeno = boa generalizacao.
     percentuais_treino = [10, 20, 30, 40, 50, 60, 70, 80]
     acuracias_no_treino, acuracias_no_teste = [], []
     for pct in percentuais_treino:
         Xt, Xts, yt, yts = train_test_split(
-            X,
-            y,
-            train_size=pct / 100,
-            random_state=42,
-            stratify=y,
+            X, y, train_size=pct / 100, random_state=42, stratify=y,
         )
         modelo_temp = DecisionTreeClassifier(
-            criterion="entropy",
-            max_depth=8,
-            random_state=42,
+            criterion="entropy", max_depth=8, random_state=42,
         )
         modelo_temp.fit(Xt, yt)
         acuracias_no_treino.append(modelo_temp.score(Xt, yt))
         acuracias_no_teste.append(modelo_temp.score(Xts, yts))
 
-    eixos[0, 0].plot(
-        percentuais_treino,
-        acuracias_no_treino,
-        "o-",
-        color="steelblue",
-        label="Treino",
-        linewidth=2,
-    )
-    eixos[0, 0].plot(
-        percentuais_treino,
-        acuracias_no_teste,
-        "s-",
-        color="tomato",
-        label="Teste",
-        linewidth=2,
-    )
-    eixos[0, 0].set_title("Curva de Aprendizado (Árvore)")
-    eixos[0, 0].set_xlabel("% dos dados usados no treino")
-    eixos[0, 0].set_ylabel("Acurácia")
-    eixos[0, 0].yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
-    eixos[0, 0].legend()
-    eixos[0, 0].grid(alpha=0.3)
+    ax1 = eixos[0, 0]
+    ax1.plot(percentuais_treino, acuracias_no_treino, "o-",
+             color="#4a90e2", label="Acerto no treino", linewidth=2.5,
+             markersize=8)
+    ax1.plot(percentuais_treino, acuracias_no_teste, "s-",
+             color="#e74c3c", label="Acerto em dados novos (teste)",
+             linewidth=2.5, markersize=8)
+    ax1.fill_between(percentuais_treino,
+                     acuracias_no_treino, acuracias_no_teste,
+                     alpha=0.12, color="gray", label="Gap (overfitting)")
+    ax1.set_title("Como a Arvore aprende\n(treino vs dados nunca vistos)",
+                  fontsize=12, fontweight="bold")
+    ax1.set_xlabel("Quantidade de dados usados no treino (%)")
+    ax1.set_ylabel("Acuracia")
+    ax1.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
+    ax1.set_ylim(0.5, 1.02)
+    ax1.legend(loc="lower right", framealpha=0.95)
+    ax1.grid(alpha=0.3)
 
-    # ── Gráfico 2: Validação cruzada k=10 fold a fold ────────────────────
-    # Cor verde = fold acima da média, vermelho = abaixo. Folds com
-    # variação pequena entre si indicam que o modelo é estável.
-    cores_fold = ["seagreen" if s >= acuracia_cv_media else "tomato" for s in scores_cv]
-    eixos[0, 1].bar(range(1, 11), scores_cv, color=cores_fold, edgecolor="white")
-    eixos[0, 1].axhline(
-        acuracia_cv_media,
-        color="black",
-        linestyle="--",
-        linewidth=1.5,
-        label=f"Média: {acuracia_cv_media:.1%}",
+    # ── Grafico 2: Matriz de confusao normalizada por linha ───────────────
+    # Normalizar por linha = "para cada classe REAL, em que classes o
+    # modelo distribuiu a previsao?". A diagonal vira o recall por
+    # classe; um numero perto de 100% significa que o modelo quase
+    # nunca confunde aquela classe com nada.
+    matriz_pct = (
+        matriz_confusao.astype("float") /
+        matriz_confusao.sum(axis=1, keepdims=True) * 100
     )
-    eixos[0, 1].set_title("Validação Cruzada k=10 (Árvore)")
-    eixos[0, 1].set_xlabel("Fold")
-    eixos[0, 1].set_ylabel("Acurácia")
-    eixos[0, 1].yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
-    eixos[0, 1].legend()
-    eixos[0, 1].grid(axis="y", alpha=0.3)
-
-    # ── Gráfico 3: Matriz de confusão (mostra ONDE o modelo erra) ────────
-    # Diagonal = acertos. Fora da diagonal = erros, com a identidade do
-    # par confundido. Tipicamente Meia ↔ Atacante são os mais misturados.
+    ax2 = eixos[0, 1]
     sns.heatmap(
-        matriz_confusao,
-        annot=True,
-        fmt="d",
-        ax=eixos[0, 2],
-        cmap="Blues",
-        xticklabels=nomes_posicoes,
-        yticklabels=nomes_posicoes,
+        matriz_pct, annot=True, fmt=".1f", ax=ax2, cmap="Greens",
+        xticklabels=nomes_posicoes, yticklabels=nomes_posicoes,
+        cbar_kws={"label": "% das instancias da classe real"},
+        vmin=0, vmax=100, annot_kws={"fontsize": 11, "fontweight": "bold"},
     )
-    eixos[0, 2].set_title("Matriz de Confusão (Árvore - teste)")
-    eixos[0, 2].set_xlabel("Posição prevista")
-    eixos[0, 2].set_ylabel("Posição real")
+    ax2.set_title("Onde a Arvore acerta e erra\n(% por classe real, diagonal = acerto)",
+                  fontsize=12, fontweight="bold")
+    ax2.set_xlabel("Posicao prevista pelo modelo")
+    ax2.set_ylabel("Posicao real")
 
-    # ── Gráfico 4: Elbow Method (escolha do K) ───────────────────────────
-    # Duas curvas no mesmo eixo X com escalas diferentes nos dois eixos Y.
-    # A linha vertical pontilhada marca o K que escolhemos (= 4 classes).
-    eixo_esq = eixos[1, 0]
-    eixo_dir = eixo_esq.twinx()
-    eixo_esq.plot(valores_k, lista_inercias, "o-", color="steelblue", label="Inércia")
-    eixo_dir.plot(
-        valores_k, lista_silhouettes, "s--", color="darkorange", label="Silhouette"
-    )
-    eixo_esq.axvline(
-        numero_de_posicoes,
-        color="gray",
-        linestyle=":",
-        label=f"K escolhido = {numero_de_posicoes}",
-    )
-    eixo_esq.set_title("Elbow Method - escolha de K")
-    eixo_esq.set_xlabel("Número de Clusters (K)")
-    eixo_esq.set_ylabel("Inércia", color="steelblue")
-    eixo_dir.set_ylabel("Silhouette Score", color="darkorange")
-    linhas_esq, labels_esq = eixo_esq.get_legend_handles_labels()
-    linhas_dir, labels_dir = eixo_dir.get_legend_handles_labels()
-    eixo_esq.legend(linhas_esq + linhas_dir, labels_esq + labels_dir, fontsize=8)
-    eixo_esq.grid(alpha=0.3)
-
-    # ── Gráfico 5: Clusters em 2D via PCA ────────────────────────────────
-    # Não conseguimos visualizar 12 dimensões; o PCA encontra as 2
-    # combinações lineares dos atributos que MAIS preservam variância e
-    # projeta cada jogador num ponto (x, y). Se os clusters aparecem como
-    # ilhas coloridas, o K-Means achou estrutura real.
-    redutor_pca = PCA(n_components=2, random_state=42)
-    X_em_2d = redutor_pca.fit_transform(X)
-    eixos[1, 1].scatter(
-        X_em_2d[:, 0],
-        X_em_2d[:, 1],
-        c=clusters_encontrados,
-        cmap="tab10",
-        alpha=0.5,
-        s=10,
-    )
-    eixos[1, 1].set_title(
-        f"Clusters K-Means projetados em 2D (PCA)\n"
-        f"Silhouette={silhouette_final:.3f} | ARI={ari_final:.3f}"
-    )
-    eixos[1, 1].set_xlabel("Componente Principal 1")
-    eixos[1, 1].set_ylabel("Componente Principal 2")
-
-    # ── Gráfico 6: Comparativo Árvore vs K-Means ─────────────────────────
-    # K-Means não tem CV (não faz sentido - ele não treina/prevê), então
-    # repetimos seu valor de acurácia nas duas colunas só para alinhar
-    # visualmente as barras.
-    nomes_metricas = ["Holdout\n(80/20)", "CV k=10\n(média)"]
-    valores_arvore = [acuracia_holdout, acuracia_cv_media]
-    valores_kmeans = [acuracia_kmeans, acuracia_kmeans]
-    posicoes_barras = np.arange(len(nomes_metricas))
-    largura = 0.3
-
-    eixos[1, 2].bar(
-        posicoes_barras - largura / 2,
-        valores_arvore,
-        largura,
-        label="Árvore de Decisão",
-        color="steelblue",
-        alpha=0.85,
-    )
-    eixos[1, 2].bar(
-        posicoes_barras + largura / 2,
-        valores_kmeans,
-        largura,
-        label="K-Means",
-        color="darkorange",
-        alpha=0.85,
-    )
-    for i, (va, vk) in enumerate(zip(valores_arvore, valores_kmeans)):
-        eixos[1, 2].text(
-            i - largura / 2, va + 0.005, f"{va:.1%}", ha="center", fontweight="bold"
+    # ── Grafico 3: PCA com rotulos REAIS ──────────────────────────────────
+    # Os 12 atributos viraram 2 componentes principais. Cada ponto e um
+    # jogador, colorido pela sua posicao verdadeira. Mostra a estrutura
+    # natural do dataset.
+    ax3 = eixos[1, 0]
+    for codigo_classe, nome in enumerate(nomes_posicoes):
+        mask = (y == codigo_classe)
+        ax3.scatter(
+            X_em_2d[mask, 0], X_em_2d[mask, 1],
+            c=[cores_por_classe[codigo_classe]],
+            alpha=0.45, s=12, label=nome,
         )
-        eixos[1, 2].text(
-            i + largura / 2, vk + 0.005, f"{vk:.1%}", ha="center", fontweight="bold"
+    ax3.set_title("Estrutura real do dataset\n(PCA 2D + posicoes verdadeiras)",
+                  fontsize=12, fontweight="bold")
+    ax3.set_xlabel("Componente Principal 1")
+    ax3.set_ylabel("Componente Principal 2")
+    legenda3 = ax3.legend(loc="best", framealpha=0.95, markerscale=2.5,
+                          title="Posicao real")
+    for handle in legenda3.legend_handles:
+        handle.set_alpha(1.0)
+
+    # ── Grafico 4: PCA com clusters do K-Means ────────────────────────────
+    # Mesmos pontos, mesmas coordenadas, mesmas cores. Mas a cor agora
+    # vem do CLUSTER que o K-Means descobriu sem ver os rotulos.
+    # Cor diferente da do grafico 3 = K-Means classificou diferente
+    # do humano.
+    ax4 = eixos[1, 1]
+    for codigo_classe, nome in enumerate(nomes_posicoes):
+        mask = (clusters_como_posicoes == codigo_classe)
+        ax4.scatter(
+            X_em_2d[mask, 0], X_em_2d[mask, 1],
+            c=[cores_por_classe[codigo_classe]],
+            alpha=0.45, s=12, label=nome,
         )
-    eixos[1, 2].set_title("Comparativo Final")
-    eixos[1, 2].set_xticks(posicoes_barras)
-    eixos[1, 2].set_xticklabels(nomes_metricas)
-    eixos[1, 2].set_ylabel("Acurácia")
-    eixos[1, 2].yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
-    eixos[1, 2].legend()
-    eixos[1, 2].grid(axis="y", alpha=0.3)
+    ax4.set_title(
+        f"Descoberta do K-Means sozinho\n"
+        f"(Acuracia vs real: {acuracia_kmeans:.1%}  |  ARI: {ari_final:.2f})",
+        fontsize=12, fontweight="bold",
+    )
+    ax4.set_xlabel("Componente Principal 1")
+    ax4.set_ylabel("Componente Principal 2")
+    legenda4 = ax4.legend(loc="best", framealpha=0.95, markerscale=2.5,
+                          title="Cluster (apos mapeamento)")
+    for handle in legenda4.legend_handles:
+        handle.set_alpha(1.0)
 
     plt.tight_layout()
     caminho_painel = output_dir / "resultados_fifa.png"
@@ -219,33 +212,34 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
         plt.show()
     else:
         plt.close(fig)
-    print(f"  → painel salvo em: {caminho_painel}")
+    print(f"  -> painel salvo em: {caminho_painel}")
 
-    # ── Gráfico bônus: importância dos atributos (conhecimento aprendido) ─
-    # Esse é o equivalente acadêmico de "abrir a caixa-preta": ver QUAL
-    # atributo a árvore considerou mais relevante para diferenciar as
-    # 4 classes. Pista esperada: os atributos de goleiro devem dominar,
-    # porque separar goleiros dos demais é trivial.
-    fig2, eixo_imp = plt.subplots(figsize=(9, 6))
+    # ── Grafico bonus: importancia dos atributos ──────────────────────────
+    # Resposta para "o que o modelo realmente aprendeu". Atributos com
+    # maior Ganho de Informacao acumulado sao os que mais discriminam
+    # entre as 4 classes.
+    fig2, eixo_imp = plt.subplots(figsize=(10, 6))
     top5_threshold = importancia_atributos.head(5).min()
     importancia_ord = importancia_atributos.sort_values()
     cores_imp = [
-        "seagreen" if v >= top5_threshold else "steelblue"
+        "#27ae60" if v >= top5_threshold else "#95a5a6"
         for v in importancia_ord.values
     ]
     importancia_ord.plot(
-        kind="barh",
-        ax=eixo_imp,
-        color=cores_imp,
-        edgecolor="white",
-        alpha=0.85,
+        kind="barh", ax=eixo_imp, color=cores_imp, edgecolor="white",
     )
+    for i, valor in enumerate(importancia_ord.values):
+        eixo_imp.text(valor + 0.005, i, f"{valor:.1%}",
+                      va="center", fontsize=9)
     eixo_imp.set_title(
-        "Importância dos Atributos - Árvore de Decisão\n"
-        "(verde = top 5 com maior Ganho de Informação)",
-        fontsize=13,
+        "O que a Arvore considerou mais importante\n"
+        "(verde = top 5 atributos com maior Ganho de Informacao)",
+        fontsize=13, fontweight="bold",
     )
-    eixo_imp.set_xlabel("Importância acumulada (Ganho de Informação)")
+    eixo_imp.set_xlabel("Importancia (% do Ganho de Informacao total)")
+    eixo_imp.xaxis.set_major_formatter(
+        plt.FuncFormatter(lambda v, _: f"{v:.0%}")
+    )
     eixo_imp.grid(axis="x", alpha=0.3)
     plt.tight_layout()
     caminho_imp = output_dir / "importancia_atributos_fifa.png"
@@ -254,31 +248,28 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
         plt.show()
     else:
         plt.close(fig2)
-    print(f"  → importância salva em: {caminho_imp}")
+    print(f"  -> importancia salva em: {caminho_imp}")
 
     # ── Resumo final em texto ─────────────────────────────────────────────
     print("\n" + "=" * 64)
     print("RESUMO FINAL")
     print("=" * 64)
-    print(
-        f"  Dataset       : FIFA 22 - {len(tabela)} jogadores, "
-        f"{len(colunas_usadas)} atributos"
-    )
+    print(f"  Dataset       : FIFA 22 - {len(tabela)} jogadores, "
+          f"{len(colunas_usadas)} atributos")
     print(f"  Classes alvo  : {list(nomes_posicoes)}")
     print()
-    print("  ÁRVORE DE DECISÃO (supervisionada)")
+    print("  ARVORE DE DECISAO (supervisionada)")
     print(f"    Holdout 80/20      : {acuracia_holdout:.2%}")
-    print(
-        f"    CV estratificada   : {acuracia_cv_media:.2%} "
-        f"± {acuracia_cv_desvio:.2%}"
-    )
+    print(f"    CV estratificada   : {acuracia_cv_media:.2%} "
+          f"+/- {acuracia_cv_desvio:.2%}")
     print()
-    print("  K-MEANS (não-supervisionado)")
+    print("  K-MEANS (nao supervisionado)")
     print(f"    Silhouette Score   : {silhouette_final:.3f}")
     print(f"    Adjusted Rand Idx  : {ari_final:.3f}")
-    print(f"    Acurácia (vs real) : {acuracia_kmeans:.2%}")
+    print(f"    Acuracia (vs real) : {acuracia_kmeans:.2%}")
     print()
-    print(f"  Atributo mais informativo: {importancia_atributos.index[0]}")
+    print(f"  Atributo mais informativo: {importancia_atributos.index[0]} "
+          f"({importancia_atributos.iloc[0]:.1%})")
     print("=" * 64)
 
 
@@ -286,7 +277,6 @@ if __name__ == "__main__":
     from step1_load_data import step1_load
     from step2_normalize_data import step2_preprocess
     from step3_machinelearning import step3_models
-
     data = step2_preprocess(step1_load())
     models = step3_models(data)
     step4_compare(data, models)
