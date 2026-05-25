@@ -33,6 +33,8 @@ def step3_models(data, random_state=42):
     # Divisão holdout estratificada. stratify=y garante que cada uma das 4
     # classes apareça na mesma proporção em treino e teste, evitando que
     # uma classe minoritária (goleiros) acabe sumindo de um dos lados.
+
+    # Pega os 19.239 jogadores e separa 80% pra treino e 20% pra teste
     X_treino, X_teste, y_treino, y_teste = train_test_split(
         X,
         y,
@@ -105,9 +107,9 @@ def step3_models(data, random_state=42):
         lista_silhouettes.append(silhouette_score(X, km_teste.labels_))
 
     # Fixamos K = número real de classes para conseguir comparar
-    # clusters ↔ posições. n_init=10 roda o K-Means 10 vezes com
+    # clusters = posições. n_init=10 roda o K-Means 10 vezes com
     # inicializações aleatórias diferentes e fica com a melhor -
-    # essa é justamente a "dependência de boa inicialização" citada
+    # essa é a "dependência de boa inicialização" citada
     # como ponto fraco do K-Means na aula.
     numero_de_posicoes = len(nomes_posicoes) # 4
     kmeans = KMeans(n_clusters=numero_de_posicoes, random_state=random_state, n_init=10)
@@ -116,7 +118,7 @@ def step3_models(data, random_state=42):
     silhouette_final = silhouette_score(X, clusters_encontrados)
     ari_final = adjusted_rand_score(y, clusters_encontrados)
 
-    # ── Tradução cluster → posição ────────────────────────────────────────
+    # ── Tradução cluster = posição ────────────────────────────────────────
     # O K-Means não conhece os nomes das classes; ele rotula como 0/1/2/3
     # arbitrariamente. Para comparar a clusterização com os rótulos reais,
     # mapeamos cada cluster para a posição mais frequente dentro dele
