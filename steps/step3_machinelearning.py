@@ -14,14 +14,9 @@ from sklearn.metrics import (
     adjusted_rand_score,
 )
 
-
 def step3_models(data, random_state=42):
     """Treina os dois algoritmos e devolve modelos, predições e métricas.
-
-    `data` é o dicionário produzido pela ETAPA 2. A semente aleatória fixa
-    (random_state=42) garante reprodutibilidade: rodar de novo no mesmo
-    computador produz exatamente os mesmos números - essencial para
-    qualquer resultado relatado em um trabalho acadêmico.
+    data é o dicionário produzido pela ETAPA 2. O random_state garante reprodutibilidade
     """
     X = data["X"]
     y = data["y"]
@@ -35,22 +30,14 @@ def step3_models(data, random_state=42):
     # uma classe minoritária (goleiros) acabe sumindo de um dos lados.
 
     # Pega os 19.239 jogadores e separa 80% pra treino e 20% pra teste
-    X_treino, X_teste, y_treino, y_teste = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        random_state=random_state,
-        stratify=y,
-    )
+    # stratify mantem proporção de jogadores pra evitar enviesamento
+    X_treino, X_teste, y_treino, y_teste = train_test_split(X, y, test_size=0.2, random_state=random_state, stratify=y)
     print(f"  Treino: {len(X_treino)} jogadores  |  Teste: {len(X_teste)} jogadores")
 
-    # criterion='entropy' = método ID3/C4.5 visto em aula. A cada nó, a
-    # árvore avalia o Ganho de Informação de cada atributo e divide pelo
-    # que mais reduz a entropia (incerteza) das classes filhas.
     arvore = DecisionTreeClassifier(
-        criterion="entropy",
+        criterion="entropy", # utilizando ganho de informação baseado em entropia como um algoritmo ID3 faria, mas sklearn usa CART
         max_depth=8,  # anti-overfitting (memorização)
-        random_state=random_state,
+        random_state=random_state, # travando a "seed" do resultado aleatorio pra ter mesmo relatorio smp
     )
     arvore.fit(X_treino, y_treino)  # treinamento ("fase de treinamento")
     y_previsto_arvore = arvore.predict(X_teste)  # fase de utilização/teste
@@ -58,25 +45,17 @@ def step3_models(data, random_state=42):
     acuracia_holdout = accuracy_score(y_teste, y_previsto_arvore)
     print(f"  Acurácia (holdout 80/20)  : {acuracia_holdout:.2%}")
 
-    # Validação cruzada k=10 estratificada - o "padrão-ouro" da aula.
-    # O modelo é treinado e testado 10 vezes em recortes diferentes;
-    # a média estabiliza o estimador, o desvio mede sua incerteza.
+    # CV k=10, O modelo é treinado e testado 10 vezes em recortes diferentes a média estabiliza o estimador, o desvio mede sua incerteza.
     kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=random_state)
     scores_cv = cross_val_score(arvore, X, y, cv=kfold, scoring="accuracy")
     acuracia_cv_media = scores_cv.mean()
     acuracia_cv_desvio = scores_cv.std()
-    print(
-        f"  Acurácia (CV k=10)        : "
-        f"{acuracia_cv_media:.2%} ± {acuracia_cv_desvio:.2%}"
-    )
+    print(f"  Acurácia (CV k=10)        : " f"{acuracia_cv_media:.2%} ± {acuracia_cv_desvio:.2%}")
 
     # feature_importances_ é o GANHO DE INFORMAÇÃO acumulado de cada
     # atributo somado por todos os nós da árvore. Quanto maior, mais
     # "discriminativo" o atributo foi para o aprendizado.
-    importancia_atributos = pd.Series(
-        arvore.feature_importances_,
-        index=colunas_usadas,
-    ).sort_values(ascending=False)
+    importancia_atributos = pd.Series(arvore.feature_importances_, index=colunas_usadas).sort_values(ascending=False)
 
     print("\n  Top 5 atributos mais informativos:")
     for atributo, importancia in importancia_atributos.head(5).items():
@@ -84,7 +63,7 @@ def step3_models(data, random_state=42):
 
     # Matriz de confusão: linhas = classe real, colunas = classe prevista.
     # A diagonal são acertos; fora dela são os erros (e indicam QUAIS pares
-    # de classes o modelo confunde - tipicamente Meia ↔ Atacante).
+    # de classes o modelo confunde, o mais comum foi Meia com Atacante).
     matriz_confusao = confusion_matrix(y_teste, y_previsto_arvore)
 
     # ══════════════════════════════════════════════════════════════════════
@@ -151,9 +130,7 @@ def step3_models(data, random_state=42):
         f"(após mapeamento por voto)"
     )
 
-    # Empacotamos TUDO num dict para a ETAPA 4 conseguir plotar sem
-    # precisar reexecutar nada. Manter o estado fora dos arquivos
-    # simplifica e deixa o pipeline rastreável.
+    # Objeto para etapa de comparação
     return {
         # --- Árvore ---
         "arvore": arvore,

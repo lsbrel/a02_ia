@@ -3,8 +3,6 @@
 ETAPA 4 - Analise dos resultados e visualizacoes
 ================================================================================
 
-Painel 2x2 com 4 graficos focados:
-
    1. Curva de aprendizado
       Como a acuracia da Arvore evolui conforme aumentamos o treino.
       O gap entre treino e teste e o indicador de overfitting.
@@ -20,14 +18,6 @@ Painel 2x2 com 4 graficos focados:
    4. Descoberta do K-Means (PCA + clusters mapeados)
       Mesmo grafico, agora colorido pelos clusters do K-Means (mapeados
       para a posicao mais frequente em cada cluster).
-
-Os graficos 3 e 4 usam o MESMO sistema de coordenadas e a MESMA paleta
-de cores, entao bate olho e da pra ver onde o K-Means concordou ou
-discordou da realidade.
-
-Gerados em arquivos separados:
-  - resultados_fifa.png            (painel 2x2)
-  - importancia_atributos_fifa.png (importancia da Arvore)
 ================================================================================
 """
 from pathlib import Path
@@ -39,9 +29,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
 
-
 BASE_DIR = Path(__file__).resolve().parent.parent   # fifa/
-
 
 def step4_compare(data, models, output_dir=BASE_DIR, show=True):
     """Renderiza o painel 2x2 e o grafico bonus de importancia."""
@@ -97,13 +85,10 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
     # PAINEL 2x2
     # ══════════════════════════════════════════════════════════════════════
     fig, eixos = plt.subplots(2, 2, figsize=(15, 12))
-    fig.suptitle(
-        "FIFA 22: Arvore de Decisao (supervisionado) vs K-Means (nao supervisionado)",
-        fontsize=15, fontweight="bold",
-    )
+    fig.suptitle("FIFA 22: Arvore de Decisao (supervisionado) vs K-Means (nao supervisionado)", fontsize=15, fontweight="bold")
 
     # ── Grafico 1: Curva de aprendizado ───────────────────────────────────
-    # Treinamos a arvore em fracoes crescentes dos dados e medimos
+    # Treinamos a arvore em frações crescentes dos dados e medimos
     # acuracia em treino e teste. Treino sempre alto; teste sobe e
     # estabiliza. Gap pequeno = boa generalizacao.
     percentuais_treino = [10, 20, 30, 40, 50, 60, 70, 80]
@@ -143,10 +128,7 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
     # modelo distribuiu a previsao?". A diagonal vira o recall por
     # classe; um numero perto de 100% significa que o modelo quase
     # nunca confunde aquela classe com nada.
-    matriz_pct = (
-        matriz_confusao.astype("float") /
-        matriz_confusao.sum(axis=1, keepdims=True) * 100
-    )
+    matriz_pct = (matriz_confusao.astype("float") / matriz_confusao.sum(axis=1, keepdims=True) * 100)
     ax2 = eixos[0, 1]
     sns.heatmap(
         matriz_pct, annot=True, fmt=".1f", ax=ax2, cmap="Greens",
@@ -154,10 +136,10 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
         cbar_kws={"label": "% das instancias da classe real"},
         vmin=0, vmax=100, annot_kws={"fontsize": 11, "fontweight": "bold"},
     )
-    ax2.set_title("Onde a Arvore acerta e erra\n(% por classe real, diagonal = acerto)",
+    ax2.set_title("Onde a Árvore acerta e erra\n(% por classe real, diagonal = acerto)",
                   fontsize=12, fontweight="bold")
-    ax2.set_xlabel("Posicao prevista pelo modelo")
-    ax2.set_ylabel("Posicao real")
+    ax2.set_xlabel("Posição prevista pelo modelo")
+    ax2.set_ylabel("Posição real")
 
     # ── Grafico 3: PCA com rotulos REAIS ──────────────────────────────────
     # Os 12 atributos viraram 2 componentes principais. Cada ponto e um
@@ -171,12 +153,11 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
             c=[cores_por_classe[codigo_classe]],
             alpha=0.45, s=12, label=nome,
         )
-    ax3.set_title("Estrutura real do dataset\n(PCA 2D + posicoes verdadeiras)",
+    ax3.set_title("Estrutura real do dataset\n(PCA 2D + posições verdadeiras)",
                   fontsize=12, fontweight="bold")
-    ax3.set_xlabel("Componente Principal 1")
-    ax3.set_ylabel("Componente Principal 2")
-    legenda3 = ax3.legend(loc="best", framealpha=0.95, markerscale=2.5,
-                          title="Posicao real")
+    ax3.set_xlabel("Eixo 1 - Linha vs Goleiro  (76% var.)")
+    ax3.set_ylabel("Eixo 2 - Defensor vs Atacante  (16% var.)")
+    legenda3 = ax3.legend(loc="best", framealpha=0.95, markerscale=2.5, title="Posicao real")
     for handle in legenda3.legend_handles:
         handle.set_alpha(1.0)
 
@@ -198,10 +179,9 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
         f"(Acuracia vs real: {acuracia_kmeans:.1%}  |  ARI: {ari_final:.2f})",
         fontsize=12, fontweight="bold",
     )
-    ax4.set_xlabel("Componente Principal 1")
-    ax4.set_ylabel("Componente Principal 2")
-    legenda4 = ax4.legend(loc="best", framealpha=0.95, markerscale=2.5,
-                          title="Cluster (apos mapeamento)")
+    ax4.set_xlabel("Eixo 1 - Linha vs Goleiro  (76% var.)")
+    ax4.set_ylabel("Eixo 2 - Defensor vs Atacante  (16% var.)")
+    legenda4 = ax4.legend(loc="best", framealpha=0.95, markerscale=2.5, title="Cluster (após mapeamento)")
     for handle in legenda4.legend_handles:
         handle.set_alpha(1.0)
 
@@ -214,10 +194,9 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
         plt.close(fig)
     print(f"  -> painel salvo em: {caminho_painel}")
 
-    # ── Grafico bonus: importancia dos atributos ──────────────────────────
+    # ── Grafico final: importancia dos atributos ──────────────────────────
     # Resposta para "o que o modelo realmente aprendeu". Atributos com
-    # maior Ganho de Informacao acumulado sao os que mais discriminam
-    # entre as 4 classes.
+    # maior Ganho de Informação acumulado são os que mais discriminam entre as 4 classes.
     fig2, eixo_imp = plt.subplots(figsize=(10, 6))
     top5_threshold = importancia_atributos.head(5).min()
     importancia_ord = importancia_atributos.sort_values()
@@ -232,11 +211,11 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
         eixo_imp.text(valor + 0.005, i, f"{valor:.1%}",
                       va="center", fontsize=9)
     eixo_imp.set_title(
-        "O que a Arvore considerou mais importante\n"
-        "(verde = top 5 atributos com maior Ganho de Informacao)",
+        "O que a Árvore considerou mais importante\n"
+        "(verde = top 5 atributos com maior Ganho de Informação)",
         fontsize=13, fontweight="bold",
     )
-    eixo_imp.set_xlabel("Importancia (% do Ganho de Informacao total)")
+    eixo_imp.set_xlabel("Importancia (% do Ganho de Informação total)")
     eixo_imp.xaxis.set_major_formatter(
         plt.FuncFormatter(lambda v, _: f"{v:.0%}")
     )
@@ -263,7 +242,7 @@ def step4_compare(data, models, output_dir=BASE_DIR, show=True):
     print(f"    CV estratificada   : {acuracia_cv_media:.2%} "
           f"+/- {acuracia_cv_desvio:.2%}")
     print()
-    print("  K-MEANS (nao supervisionado)")
+    print("  K-MEANS (não supervisionado)")
     print(f"    Silhouette Score   : {silhouette_final:.3f}")
     print(f"    Adjusted Rand Idx  : {ari_final:.3f}")
     print(f"    Acuracia (vs real) : {acuracia_kmeans:.2%}")

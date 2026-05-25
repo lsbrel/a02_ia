@@ -17,8 +17,7 @@ COLUNAS_USADAS = [
 ]
 
 # Subconjunto das colunas acima que sao NaN para goleiros no dataset original.
-# Trataremos esses NaN como 0 (semanticamente: o FIFA nao mede essas habilidades
-# em goleiros, e o valor zero deixa a classe Goleiro trivialmente separavel).
+# Trata esses NaN como 0.
 COLUNAS_SO_DE_LINHA = [
     "pace", "shooting", "passing", "dribbling", "defending", "physic",
 ]
@@ -65,17 +64,11 @@ def step2_preprocess(tabela_original):
     # Mantemos apenas o subconjunto relevante (atributos + alvo).
     tabela = tabela_original[COLUNAS_USADAS + ["posicao_simples"]].copy()
 
-    # IMPORTANTE: os goleiros do FIFA tem NaN nas 6 estatisticas de jogadores
-    # de linha (pace, shooting, passing, dribbling, defending, physic), porque
-    # o jogo nao calcula esses ratings para a posicao. Se simplesmente
-    # chamassemos dropna() aqui, perderiamos TODOS os goleiros (2132 instancias)
-    # e ficariamos com apenas 3 classes. Preenchemos esses NaN com 0: zero e
-    # interpretavel como "o FIFA nao mede essa habilidade neste jogador" e da
-    # ao classificador uma assinatura ultra-clara para detectar goleiros.
+    # IMPORTANTE: Goleiros não tem mesma estatistica de jogadores de linha, 
+    # preenchemos com 0 pra evitar que sejam droppados
     tabela[COLUNAS_SO_DE_LINHA] = tabela[COLUNAS_SO_DE_LINHA].fillna(0)
 
-    # Agora o dropna serve apenas para remover jogadores com posicao nao
-    # mapeada (raras combinacoes que cairam no return None de agrupar_posicao).
+    # Agora o dropna remove posições n mapeadas
     tabela = tabela.dropna(subset=["posicao_simples"]).reset_index(drop=True)
 
     print(f"  Instâncias após a limpeza : {len(tabela)}")
@@ -110,7 +103,7 @@ def step2_preprocess(tabela_original):
     )
 
     # X_norm = (X - média) / desvio_padrão, coluna a coluna. Indispensável
-    # para o K-Means; inofensivo para a Árvore.
+    # para o K-Means; dispensavel para a arvore.
     normalizador = StandardScaler()
     X = normalizador.fit_transform(X_texto)
     print(f"  Matriz X final: {X.shape[0]} linhas x {X.shape[1]} atributos.")
