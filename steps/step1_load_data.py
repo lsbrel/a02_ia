@@ -7,7 +7,7 @@ CSV_PATH = BASE_DIR / "database" / "players_22.csv"
 
 
 def step1_load(csv_path=CSV_PATH):
-    print("ETAPA 1 — Carregando o dataset FIFA 22...")
+    print("ETAPA 1 - Carregando o dataset FIFA 22...")
 
     if not csv_path.exists():
         raise FileNotFoundError(f"Arquivo não encontrado: {csv_path}\n")
